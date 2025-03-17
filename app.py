@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-
+import plotly.io as pio
 # Set page config for wide layout
 st.set_page_config(page_title="SuperStore KPI Dashboard", layout="wide")
 
@@ -245,7 +245,7 @@ with kpi_col4:
     )
 
 # ---- KPI Selection ----
-st.subheader("Visualize KPI Across Time")
+st.subheader("Visualize KPI Across Time & Product Types")
 
 if df.empty:
     st.warning("No data available for the selected filters and date range.")
@@ -264,6 +264,11 @@ else:
 # ---- Add Margin Rate Column to df ----
 df["Margin Rate"] = df["Profit"] / df["Sales"].replace(0, 1)  # Avoid dividing by zero
 
+import io
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
 # ---- Prepare Data for Chart ----
 if aggregation_level == "Week":
     df["Week"] = df["Order Date"].dt.strftime('%Y-%U')  # Year-Week format
@@ -277,7 +282,7 @@ if aggregation_level == "Week":
     all_weeks_df = pd.DataFrame({"Week": all_weeks_str})
     daily_grouped = pd.merge(all_weeks_df, daily_grouped, on="Week", how="left").fillna(0)
 
-    # Create a range slider inside the chart for week selection
+    # Create the line chart for weeks
     fig_line = px.line(
         daily_grouped,
         x="Week",
@@ -294,21 +299,23 @@ if aggregation_level == "Week":
         )
     )
 
-    # Customize the tooltip to include Week, Sales, Profit, and Margin Rate
-    fig_line.update_traces(
-        hovertemplate="Week: %{x}<br>Sales: %{customdata[0]}<br>Profit: %{customdata[1]}<br>Margin Rate: %{customdata[2]}"
+    # Prepare the data for download as CSV
+    csv_data_week = daily_grouped.to_csv(index=False)
+    csv_buffer_week = io.StringIO(csv_data_week)  # Buffer to hold the CSV data
+
+    # Create a download button for the user to download the data
+    st.download_button(
+        label="Download Weekly Data",
+        data=csv_buffer_week.getvalue(),
+        file_name="sales_over_week.csv",
+        mime="text/csv",
     )
-
-    # Set custom data for hover tooltips (week number, sales, profit, margin rate)
-    fig_line.update_traces(customdata=daily_grouped[["Sales", "Profit", "Margin Rate"]].values)
-
-    fig_line.update_layout(height=400, showlegend=False, xaxis_showgrid=False, yaxis_showgrid=False)
 
 elif aggregation_level == "Month":
     df["Month"] = df["Order Date"].dt.to_period("M").astype(str)  # Convert Period to string
     daily_grouped = df.groupby("Month").agg({selected_kpi: "sum", "Sales": "sum", "Profit": "sum", "Margin Rate": "sum"}).reset_index()
-    
-    # Create the line chart
+
+    # Create the line chart for monthly data
     fig_line = px.line(
         daily_grouped,
         x="Month",
@@ -321,7 +328,7 @@ elif aggregation_level == "Month":
     # Manually adjust x-axis tickvals and ticktext to avoid packed labels
     tickvals = daily_grouped["Month"][::3]  # Show every 3rd month
     ticktext = daily_grouped["Month"].apply(lambda x: pd.to_datetime(x).strftime('%b %Y'))[::3]  # Month-Year format
-    
+
     fig_line.update_layout(
         xaxis=dict(
             rangeslider=dict(visible=True),
@@ -331,10 +338,23 @@ elif aggregation_level == "Month":
         )
     )
 
+    # Prepare the data for download as CSV
+    csv_data_month = daily_grouped.to_csv(index=False)
+    csv_buffer_month = io.StringIO(csv_data_month)  # Buffer to hold the CSV data
+
+    # Create a download button for the user to download the data
+    st.download_button(
+        label="Download Monthly Data",
+        data=csv_buffer_month.getvalue(),
+        file_name="sales_over_month.csv",
+        mime="text/csv",
+    )
+
 elif aggregation_level == "Quarter":
     df["Quarter"] = df["Order Date"].dt.to_period("Q").astype(str)  # Convert Period to string
     daily_grouped = df.groupby("Quarter").agg({selected_kpi: "sum", "Sales": "sum", "Profit": "sum", "Margin Rate": "sum"}).reset_index()
 
+    # Create the line chart for quarterly data
     fig_line = px.line(
         daily_grouped,
         x="Quarter",
@@ -352,13 +372,28 @@ elif aggregation_level == "Quarter":
             tickvals=daily_grouped["Quarter"],
             ticktext=daily_grouped["Quarter"],  # Showing Quarter as labels
             type="category",  # Treat as categorical data
+            tickangle=45  # Set the angle of x-axis tick labels to 45 degrees
         )
     )
+
+    # Prepare the data for download as CSV
+    csv_data_quarter = daily_grouped.to_csv(index=False)
+    csv_buffer_quarter = io.StringIO(csv_data_quarter)  # Buffer to hold the CSV data
+
+    # Create a download button for the user to download the data
+    st.download_button(
+        label="Download Quarterly Data",
+        data=csv_buffer_quarter.getvalue(),
+        file_name="sales_over_quarter.csv",
+        mime="text/csv",
+    )
+
 
 elif aggregation_level == "Year":
     df["Year"] = df["Order Date"].dt.year  # Ensure no .5 for year
     daily_grouped = df.groupby("Year").agg({selected_kpi: "sum", "Sales": "sum", "Profit": "sum", "Margin Rate": "sum"}).reset_index()
 
+    # Create the line chart for yearly data
     fig_line = px.line(
         daily_grouped,
         x="Year",
@@ -378,7 +413,17 @@ elif aggregation_level == "Year":
         )
     )
 
+    # Prepare the data for download as CSV
+    csv_data_year = daily_grouped.to_csv(index=False)
+    csv_buffer_year = io.StringIO(csv_data_year)  # Buffer to hold the CSV data
 
+    # Create a download button for the user to download the data
+    st.download_button(
+        label="Download Yearly Data",
+        data=csv_buffer_year.getvalue(),
+        file_name="sales_over_year.csv",
+        mime="text/csv",
+    )
 
 # ---- Prepare Bar Chart (Top 10 Sub-Categories) ----
 subcategory_grouped = df.groupby("Sub-Category").agg({
@@ -426,3 +471,15 @@ with col_right:
 
     # Display the Bar Chart
     st.plotly_chart(fig_bar, use_container_width=True)
+
+    # Prepare the data for download as CSV (Top 10 Products)
+    csv_data_bar = top_10_subcategories.to_csv(index=False)
+    csv_buffer_bar = io.StringIO(csv_data_bar)  # Buffer to hold the CSV data
+
+    # Create a download button for the user to download the data
+    st.download_button(
+        label="Download Top 10 Products Data",
+        data=csv_buffer_bar.getvalue(),
+        file_name="top_10_products.csv",
+        mime="text/csv",
+    )
